@@ -1070,6 +1070,8 @@ def GetQuotaUtilization(myToken:str, aid:str):
         quotaUnits = jsonResult["quota"]["cloudUnitsIncluded"]
         unitsUsed = int(jsonResult["cloudUnitsNextBillingPeriod"]) + int(jsonResult["enterpriseUnitsNextBillingPeriod"])
 
+        if quotaUnits == 0:
+            return -1
         return unitsUsed/quotaUnits
 
     else:
