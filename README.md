@@ -1,5 +1,8 @@
 # TE-PlanBuilder
-Python Script to fill the Implementation Plan 2023 document.
+Python Script to fill the Implementation Plan 2023 document with what is currently configured.
+
+## Info Provided
+The script will pull the info for Agents (Enterprise and Endpoint), tests, %Unit consumption, customer name and date of doc creation.
 
 ## How to run?
 1. Make sure you are added to the Account Group with Org Admin permissions
