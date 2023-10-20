@@ -6,7 +6,8 @@ The script will pull the info for Agents (Enterprise and Endpoint), tests, %Unit
 
 ## How to run?
 1. Make sure you are added to the Account Group with Org Admin permissions
-2. Run python script
+2. Clone this repo to your computer
+3. Run python script
    ```
    python3 TE-PlanBuilder.py
    ```
