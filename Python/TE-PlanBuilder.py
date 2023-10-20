@@ -1,5 +1,6 @@
 import requests
 import re
+import os
 import sys
 import readline
 import json
@@ -84,6 +85,7 @@ class TestType(Enum):
     dns_server = "dns-server"
     voiceRTPStream = "voice"
     sip_server = "sip-server"
+    http_transaction = "web-transactions"
 
 def SelectColumnsFromPrettyTable(myTable:PrettyTable, columns):
     columns = [s.strip() for s in columns]
@@ -653,19 +655,6 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["page-load", test["testName"], test["url"],
                                                 agentString, test["interval"], "","", "Completed", enabled ])
-                                
-                            if [test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
-                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
-                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
-                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString] not in listOfTests:
-                                myTable.add_row([test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
-                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
-                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
-                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString])
-                                listOfTests.append([test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
-                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
-                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
-                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString])
                     elif test["type"] == testType.value and test["type"] == TestType.voiceRTPStream.value:
                             if(test["enabled"] == 1):
                                 enabled = "Enabled"
@@ -700,8 +689,7 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                             if ["voice (RTP Stream)", test["testName"], target,
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["voice (RTP Stream)", test["testName"], target,
-                                                agentString, test["interval"], "","", "Completed", enabled ])
-                                
+                                                agentString, test["interval"], "","", "Completed", enabled ])           
                     elif test["type"] == testType.value and test["type"] == TestType.sip_server.value:
                         if(test["enabled"] == 1):
                             enabled = "Enabled"
@@ -744,6 +732,33 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                         if ["sip-server", test["testName"], target,
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["sip-server", test["testName"], target,
+                                                agentString, test["interval"], "","", "Completed", enabled ])
+                    elif test["type"] == testType.value and test["type"] == TestType.http_transaction.value:
+                            if(test["enabled"] == 1):
+                                enabled = "Enabled"
+                            else:
+                                enabled = "Disabled"
+                            if test['alertsEnabled'] == 0:
+                                alertsEnabled = "No"
+                            elif test['alertsEnabled'] == 1:
+                                alertsEnabled = "Yes"
+                            if "createdDate" in test:
+                                createdDate = test["createdDate"]
+                            
+                            alertString = ""
+                            agentString = ""
+                            #alerts = GetAlertsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
+                            agents = GetAgentsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
+                            
+                            #for alert in alerts:
+                            #    alertString += alert + ","
+                            #alertString = alertString[:-1]
+                            for agent in agents:
+                                agentString += agent + ","
+                            agentString = agentString[:-1]
+                            if ["web-transactions", test["testName"], test["url"],
+                                agentString, test["interval"], "","", "Completed", enabled ] not in results:
+                                results.append(["web-transactions", test["testName"], test["url"],
                                                 agentString, test["interval"], "","", "Completed", enabled ])
     else:
         return
@@ -951,58 +966,6 @@ def SetRateLimiteThreshold(threshold):
         return True
     return False
 
-def GetListOfCMDs():
-    listOfCMDs = ["show agent list enterprise",
-                  "show agent list cluster",
-                  "show agent list endpoint",
-                  "show agent list cloud",
-                  "show agent list non endpoint",
-                  "show test list dns-trace",
-                  "show test list dns-sec",
-                  "show test list agent-server",
-                  "show test list http-server",
-                  "show test list page-load",
-                  "show test list all",
-                  "show test list dns-trace summary",
-                  "show test list dns-sec summary",
-                  "show test list agent-server summary",
-                  "show test list http-server summary",
-                  "show test list page-load summary",
-                  "show test list voice-rtp",
-                  "show test list sip-server",
-                  "show test list all summary",
-                  "show test-id all",
-                  "show test-id column all",
-                  "delete test <TestID1,TestID2,...,TestIDn>",
-                  "set rate-limit threshold <1-OrgLimit>",
-                  "switchto <accountGroupName>",
-                  "show account-groups",
-                  "? OR <someCMD> ?",
-                  "show alers active [<number>d|h|m | YYYY-mm-ddTHH:MM:SS YYYY-mm-ddTHH:MM:SS]",
-                  "disable test"
-                  ]
-    output = ""
-    numberOfColumns = 2
-    columns = []
-    table = PrettyTable()
-    listOfCMDs = [ s + "  " for s in listOfCMDs]
-    for idx in range(numberOfColumns):
-        columns.append(str(idx))
-    table.field_names = columns
-    table.header = False
-    table.border = False
-    row = []
-    for cmd in listOfCMDs:
-        if len(row) >= numberOfColumns:
-            table.add_row(row)
-            row = []
-            row.append(cmd)
-        else:
-            row.append(cmd)
-    table.align = "l"
-    table._set_double_border_style()
-    return table
-
 def GetActiveAlerts(myToken:str, aid:str, myParameters=[""], returnType = "table", selectColumns = "ALL"):
     """
 
@@ -1085,47 +1048,6 @@ def GetListOfUsers(myToken:str, aid:str, returnType="table", selectColumns="ALL"
         else:
             return SelectColumnsFromPrettyTable(myTable, columns=selectColumns)
     code = result.status_code 
-
-def DisableTest(myToken:str, aid:str, id):
-    global headers
-    global rate_limit
-    listOfSuccessIDs = []
-    headers = {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ' + myToken,
-    }
-    myTable = PrettyTable()
-
-    if rate_limit > rate_limit_threshold or rate_limit == -1:
-        get_resource = "/tests/" + str(id) + ".json"
-
-        result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
-
-        try:
-            rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
-        except Exception as ex:
-            print(ex)
-
-        if result.status_code > 199 and result.status_code < 400:
-            jsonResult = json.loads(result.text)['test']
-            testType = jsonResult[0]['type']
-            post_resource = "/tests/" + str(testType) + "/" + str(id) + "/update.json"
-            try:
-                payload = { "enabled" : 0 }
-                result = session.post(url= BASE_URL + post_resource + "?aid=" + str(aid), data = json.load(payload), headers = headers)
-                if result.status_code > 199 and result.status_code < 400:
-                    print(bcolors.OKGREEN + bcolors.BOLD+ str(id) + " : SUCCESS : " + "disabled test " + str(jsonResult[0]['testName']) + bcolors.ENDC)
-                    listOfSuccessIDs.append(id)
-                else:
-                    print(bcolors.FAIL + str(id) + " : FAIL : " + str(jsonResult[0]['testName']) + json.loads(result.text)['errorMessage'] + bcolors.ENDC)
-            except Exception as ex:
-                print(bcolors.FAIL + str(id) + " : FAIL : " + str(ex.args[0]) + bcolors.ENDC)
-        elif result.status_code > 399:
-            print(bcolors.FAIL + str(id) + " : FAIL : " + json.loads(result.text)['errorMessage'] + bcolors.ENDC)
-        
-    else:
-        return
-    return listOfSuccessIDs
 
 def GetQuotaUtilization(myToken:str, aid:str):
     global headers
@@ -1259,6 +1181,7 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     listOfTests += (GetTests(myToken, TestType.sip_server, aid))
     listOfTests += (GetTests(myToken, TestType.http_server, aid))
     listOfTests += (GetTests(myToken, TestType.page_load, aid))
+    listOfTests += (GetTests(myToken, TestType.http_transaction, aid))
 
     #DNS-Server
     testRow = 0
@@ -1376,6 +1299,7 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
 
     #endregion
 
+    os.remove("tempImplementationPlan.xlsx")
     workbook.save(orgName + "_ImplementationPlan.xlsx")
 
 
@@ -1428,7 +1352,7 @@ def main():
     while(ValidateAccountName(token, "") == False):
         print()
 
-    BuildImplementationPlan("Thousandeyes - Implementation Plan_2023.xlsx", token, aid)
+    BuildImplementationPlan("Python/Thousandeyes - Implementation Plan_2023.xlsx", token, aid)
     
     watchdog.stop()
 
