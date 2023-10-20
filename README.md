@@ -12,7 +12,7 @@ The script will pull the info for Agents (Enterprise and Endpoint), tests, %Unit
    ```
 4. Script will ask for your token, provide it
 5. After a few seconds, it will show a complete list of the available Account Groups. Type the name of the AG you are interested on.
-6. After a few seconds/minutes, the script will exit and the file will be located on the same directory as the script.
+6. After a few seconds/minutes, the script will exit and the file will be located under TE-PlanBuilder dir.
    `<orgName>_ImplementationPlan.xlsx`
 
 ## Author
