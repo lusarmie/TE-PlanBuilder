@@ -240,7 +240,10 @@ def GetListOfAgents(myToken:str, agentType:AgentType, aid:str, returnType="table
                 elif agent["agentType"] == "enterprise-pulse":
                     agentType = "Endpoint-Pulse"
                 
-                results.append([agentType, agent["agentName"], "", "", str(agent["location"]['locationName']), agent["status"]])
+                if "location" in agent:
+                    results.append([agentType, agent["agentName"], "", "", str(agent["location"]['locationName']), agent["status"]])
+                else:
+                    results.append([agentType, agent["agentName"], "", "", "", agent["status"]])
                 
     else:
         return
