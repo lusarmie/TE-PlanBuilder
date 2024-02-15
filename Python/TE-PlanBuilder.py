@@ -1,6 +1,5 @@
 import requests
 import re
-import os
 import sys
 import readline
 import json
@@ -30,6 +29,11 @@ headers = {
     'Authorization': 'Bearer ' + token,
 }
 session = requests.Session()
+
+class EndpointLicense(Enum):
+    ADVANTAGE = "advantage"
+    ESSENTIALS = "essentials"
+    EMBEDDED = "embedded"
 
 class Watchdog(Exception):
     def __init__(self, timeout, userHandler=None):  # timeout in seconds
@@ -85,7 +89,13 @@ class TestType(Enum):
     dns_server = "dns-server"
     voiceRTPStream = "voice"
     sip_server = "sip-server"
-    http_transaction = "web-transactions"
+    scheduled_test = "endpoint-tests"
+    automated_test = "endpoint-automated-session-tests"
+    transaction_test = "web-transactions"
+
+class DocumentType(Enum):
+    ENTERPRISE_AGENTS = 1
+    ENDPOINT_AGENTS = 2
 
 def SelectColumnsFromPrettyTable(myTable:PrettyTable, columns):
     columns = [s.strip() for s in columns]
@@ -307,6 +317,7 @@ def GetAgentFromID(myToken:str, ais:str, agentID):
             while(result.status_code == 429):
                 result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
         try:
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
             rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
         except Exception as ex:
             print(ex)
@@ -364,6 +375,7 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
         result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
         
         try:
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
             rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
         except Exception as ex:
             print(ex)
@@ -658,6 +670,67 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["page-load", test["testName"], test["url"],
                                                 agentString, test["interval"], "","", "Completed", enabled ])
+                                
+                            if [test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
+                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
+                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
+                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString] not in listOfTests:
+                                myTable.add_row([test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
+                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
+                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
+                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString])
+                                listOfTests.append([test["testName"], testType.value, test["url"], test['interval'] , alertsEnabled, test['pageLoadTimeLimit'], test['pageLoadTargetTime'],
+                                            test["httpTimeLimit"], test["httpTargetTime"], networkMeasurements, bwMeasurements, bgpMeasurements, mtuMeasurements,
+                                            test["protocol"], test["probeMode"], test['pathTraceMode'], test["numPathTraces"], test['sslVersion'],
+                                            test["verifyCertificate"], test['authType'], test['httpVersion'], redirects, createdDate, test["enabled"], alertString, agentString])
+                    elif test["type"] == testType.value and test["type"] == TestType.transaction_test.value:
+                            if(test["enabled"] == 1):
+                                enabled = "Enabled"
+                            else:
+                                enabled = "Disabled"
+                            if test['alertsEnabled'] == 0:
+                                alertsEnabled = "No"
+                            elif test['alertsEnabled'] == 1:
+                                alertsEnabled = "Yes"
+                            if test['networkMeasurements'] == 0:
+                                networkMeasurements = "No"
+                            elif test['networkMeasurements'] == 1:
+                                networkMeasurements = "Yes"
+                            if test['mtuMeasurements'] == 0:
+                                mtuMeasurements = "No"
+                            elif test['mtuMeasurements'] == 1:
+                                mtuMeasurements = "Yes"
+                            if test['bandwidthMeasurements'] == 0:
+                                bwMeasurements = "No"
+                            elif test['bandwidthMeasurements'] == 1:
+                                bwMeasurements = "Yes"
+                            if test['bgpMeasurements'] == 0:
+                                bgpMeasurements = "No"
+                            elif test['bgpMeasurements'] == 1:
+                                bgpMeasurements = "Yes"
+                            if test['followRedirects'] == 0:
+                                redirects = "No"
+                            elif test['followRedirects'] == 1:
+                                redirects = "Yes"
+                            if "createdDate" in test:
+                                createdDate = test["createdDate"]
+                            
+                            alertString = ""
+                            agentString = ""
+                            #alerts = GetAlertsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
+                            agents = GetAgentsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
+                            
+                            #for alert in alerts:
+                            #    alertString += alert + ","
+                            #alertString = alertString[:-1]
+                            for agent in agents:
+                                agentString += agent + ","
+                            agentString = agentString[:-1]
+                            if ["web-transaction", test["testName"], test["url"],
+                                agentString, test["interval"], "","", "Completed", enabled ] not in results:
+                                results.append(["web-transaction", test["testName"], test["url"],
+                                                agentString, test["interval"], "","", "Completed", enabled ])    
+                            
                     elif test["type"] == testType.value and test["type"] == TestType.voiceRTPStream.value:
                             if(test["enabled"] == 1):
                                 enabled = "Enabled"
@@ -692,7 +765,8 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                             if ["voice (RTP Stream)", test["testName"], target,
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["voice (RTP Stream)", test["testName"], target,
-                                                agentString, test["interval"], "","", "Completed", enabled ])           
+                                                agentString, test["interval"], "","", "Completed", enabled ])
+                                
                     elif test["type"] == testType.value and test["type"] == TestType.sip_server.value:
                         if(test["enabled"] == 1):
                             enabled = "Enabled"
@@ -735,33 +809,6 @@ def GetTests(myToken:str, testType:TestType, aid:str, returnType="table", select
                         if ["sip-server", test["testName"], target,
                                 agentString, test["interval"], "","", "Completed", enabled ] not in results:
                                 results.append(["sip-server", test["testName"], target,
-                                                agentString, test["interval"], "","", "Completed", enabled ])
-                    elif test["type"] == testType.value and test["type"] == TestType.http_transaction.value:
-                            if(test["enabled"] == 1):
-                                enabled = "Enabled"
-                            else:
-                                enabled = "Disabled"
-                            if test['alertsEnabled'] == 0:
-                                alertsEnabled = "No"
-                            elif test['alertsEnabled'] == 1:
-                                alertsEnabled = "Yes"
-                            if "createdDate" in test:
-                                createdDate = test["createdDate"]
-                            
-                            alertString = ""
-                            agentString = ""
-                            #alerts = GetAlertsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
-                            agents = GetAgentsFromTest(myToken=myToken, aid=aid, testID=test["testId"])
-                            
-                            #for alert in alerts:
-                            #    alertString += alert + ","
-                            #alertString = alertString[:-1]
-                            for agent in agents:
-                                agentString += agent + ","
-                            agentString = agentString[:-1]
-                            if ["web-transactions", test["testName"], test["url"],
-                                agentString, test["interval"], "","", "Completed", enabled ] not in results:
-                                results.append(["web-transactions", test["testName"], test["url"],
                                                 agentString, test["interval"], "","", "Completed", enabled ])
     else:
         return
@@ -885,6 +932,7 @@ def GetTestID(myToken:str, aid:str, returnType="table", column="ALL", selectColu
         myTable.field_names = ["Test Name", "Test ID", "Test Type", "Enabled" ]
 
         try:
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
             rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
         except Exception as ex:
             print(ex)
@@ -1052,6 +1100,47 @@ def GetListOfUsers(myToken:str, aid:str, returnType="table", selectColumns="ALL"
             return SelectColumnsFromPrettyTable(myTable, columns=selectColumns)
     code = result.status_code 
 
+def DisableTest(myToken:str, aid:str, id):
+    global headers
+    global rate_limit
+    listOfSuccessIDs = []
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    myTable = PrettyTable()
+
+    if rate_limit > rate_limit_threshold or rate_limit == -1:
+        get_resource = "/tests/" + str(id) + ".json"
+
+        result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+
+        try:
+            rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        except Exception as ex:
+            print(ex)
+
+        if result.status_code > 199 and result.status_code < 400:
+            jsonResult = json.loads(result.text)['test']
+            testType = jsonResult[0]['type']
+            post_resource = "/tests/" + str(testType) + "/" + str(id) + "/update.json"
+            try:
+                payload = { "enabled" : 0 }
+                result = session.post(url= BASE_URL + post_resource + "?aid=" + str(aid), data = json.load(payload), headers = headers)
+                if result.status_code > 199 and result.status_code < 400:
+                    print(bcolors.OKGREEN + bcolors.BOLD+ str(id) + " : SUCCESS : " + "disabled test " + str(jsonResult[0]['testName']) + bcolors.ENDC)
+                    listOfSuccessIDs.append(id)
+                else:
+                    print(bcolors.FAIL + str(id) + " : FAIL : " + str(jsonResult[0]['testName']) + json.loads(result.text)['errorMessage'] + bcolors.ENDC)
+            except Exception as ex:
+                print(bcolors.FAIL + str(id) + " : FAIL : " + str(ex.args[0]) + bcolors.ENDC)
+        elif result.status_code > 399:
+            print(bcolors.FAIL + str(id) + " : FAIL : " + json.loads(result.text)['errorMessage'] + bcolors.ENDC)
+        
+    else:
+        return
+    return listOfSuccessIDs
+
 def GetQuotaUtilization(myToken:str, aid:str):
     global headers
     global rate_limit
@@ -1073,8 +1162,6 @@ def GetQuotaUtilization(myToken:str, aid:str):
         quotaUnits = jsonResult["quota"]["cloudUnitsIncluded"]
         unitsUsed = int(jsonResult["cloudUnitsNextBillingPeriod"]) + int(jsonResult["enterpriseUnitsNextBillingPeriod"])
 
-        if quotaUnits == 0:
-            return -1
         return unitsUsed/quotaUnits
 
     else:
@@ -1102,6 +1189,382 @@ def GetOrganizationName(myToken:str, aid:str):
             if accountGroup["aid"] == aid:
                 return accountGroup["organizationName"]
 
+def GetDashboardDetail(myToken:str, aid:str, dashboardId:str):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/dashboards/" + dashboardId + ".json"
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        return json.loads(result.text)["dashboards"]
+
+def GetDashboards(myToken:str, aid:str, reportType:DocumentType, removeBuiltIn=True):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/dashboards.json"
+    dashboardsEnterprise = []
+    dashboardsEndpoint = []
+
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        jsonResult = json.loads(result.text)["dashboards"]
+        for dashboard in jsonResult:
+            hasEndpointData = False
+            hasEnterpriseData = False
+            dashboardDetail = GetDashboardDetail(myToken, aid, dashboard["id"])
+            for widget in dashboardDetail[0]["widgets"]:
+                for component in widget["dataComponents"]:
+                    if "metric" in component:
+                        if "Endpoint" in component["metric"]:
+                            hasEndpointData = True
+                        else:
+                            hasEnterpriseData = True
+            
+            if removeBuiltIn:
+                if hasEndpointData and not dashboard["isBuiltIn"]:
+                    #Dashboard Name     Number of Widgets   
+                    dashboardsEndpoint.append([dashboardDetail[0]["name"], str(len(dashboardDetail[0]["widgets"]))])
+                if hasEnterpriseData and not dashboard["isBuiltIn"]:
+                    #Dashboard Name     Number of Widgets   
+                    dashboardsEnterprise.append([dashboardDetail[0]["name"], str(len(dashboardDetail[0]["widgets"]))])
+            else:
+                if hasEndpointData:
+                    #Dashboard Name     Number of Widgets   IsBuiltIn
+                    dashboardsEndpoint.append([dashboardDetail[0]["name"], str(len(dashboardDetail[0]["widgets"])), dashboard["isBuiltIn"]])
+                if hasEnterpriseData:
+                    #Dashboard Name     Number of Widgets   IsBuiltIn
+                    dashboardsEnterprise.append([dashboardDetail[0]["name"], str(len(dashboardDetail[0]["widgets"])), dashboard["isBuiltIn"]])
+        
+        if reportType == DocumentType.ENDPOINT_AGENTS:
+            return dashboardsEndpoint
+        elif reportType == DocumentType.ENTERPRISE_AGENTS:
+            return dashboardsEnterprise
+
+def GetAlertDetails(myToken:str, aid:str, alertId):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/alert-rules/" + str(alertId) + ".json"
+    dashboardsEnterprise = []
+    dashboardsEndpoint = []
+
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        jsonResult = json.loads(result.text)["alertRules"]
+        return jsonResult[0]
+    else:
+        return []
+
+def GetListOfAlerts(myToken:str, aid:str, reportType:DocumentType):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/alert-rules.json"
+    
+    listOfAlerts = []
+
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        jsonResult = json.loads(result.text)["alertRules"]
+    
+    for alertRule in jsonResult:
+        expression = str(re.sub(r"(.)(?=.*\1)\)", ")", alertRule["expression"]))
+        expression = expression.replace("||", "\nor\n").replace("&&", "and").replace("!", " not ").replace("(","").replace(")", ","). replace("not = \"None\"", "not present")
+        expression = str(re.sub(r"(.)(?=.*\1)\)", ")", expression))
+        severity = GetAlertDetails(myToken, aid, alertRule["ruleId"])["severity"]
+        if "minimumSourcesPct" in alertRule:
+            percentageLegend = str(alertRule["minimumSourcesPct"]) + "% "
+        else:
+            percentageLegend = str(alertRule["minimumSources"]) + " "
+
+        if "roundsViolatingMode" in alertRule:
+            listOfAlerts.append([alertRule["alertType"],alertRule["ruleName"], "", expression, str(alertRule["roundsViolatingMode"]) + " of " + percentageLegend + 
+                                                                                                "agent(s), and " + str(alertRule["roundsViolatingRequired"]) + 
+                                                                                                " out of " + str(alertRule["roundsViolatingOutOf"]) + " times in a row", severity, ""])
+        else:
+            listOfAlerts.append([alertRule["alertType"],alertRule["ruleName"], "", expression, "Conditions met by at least " + percentageLegend +
+                                                                                                "agent(s), and " + str(alertRule["roundsViolatingRequired"]) + 
+                                                                                                " out of " + str(alertRule["roundsViolatingOutOf"]) + " times in a row", severity, ""])
+    
+    uniqueValues = []
+
+    for alert in listOfAlerts:
+        if alert not in uniqueValues:
+            uniqueValues.append(alert)
+    
+    return uniqueValues
+
+def GetLabelsFromIds(myToken:str, listOfLabelIds, aid:str):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/groups.json"
+    results = []
+
+    if rate_limit > rate_limit_threshold or rate_limit == -1:
+        result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+        if(result.status_code == 429):
+            print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+            while(result.status_code == 429):
+                result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+
+        try:
+            rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+        except Exception as ex:
+            print(ex)
+    for label in result.json()["groups"]:
+        if label["groupId"] in listOfLabelIds:
+            results.append([label["groupId"], label["name"]])
+    return results
+
+def GetAgentsFromIds(myToken:str, listOfAgentIds, aid:str):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/endpoint-agents.json"
+    results = []
+
+    if rate_limit > rate_limit_threshold or rate_limit == -1:
+        result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+        if(result.status_code == 429):
+            print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+            while(result.status_code == 429):
+                result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+
+        try:
+            rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+        except Exception as ex:
+            print(ex)
+    for agent in result.json()["endpointAgents"]:
+        if agent["agentId"] in listOfAgentIds:
+            results.append([agent["agentId"], agent["agentName"]])
+    return results
+
+
+def GetEndpointTests(myToken:str, testType:TestType, aid:str):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/" + testType.value + ".json"
+    results = []
+
+    if rate_limit > rate_limit_threshold or rate_limit == -1:
+        result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+        if(result.status_code == 429):
+            print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+            while(result.status_code == 429):
+                result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+
+        try:
+            rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+            print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+        except Exception as ex:
+            print(ex)
+        
+        if(testType == TestType.scheduled_test):
+            assignedTo = ""
+            status = ""
+            for test in result.json()["endpointTest"]:
+                if test["agentSelectorConfig"]["agentSelectorType"] == "LIST_OF_LABELS":
+                    listOfLabels = GetLabelsFromIds(myToken, test["agentSelectorConfig"]["labelIds"], aid)
+                    for label in listOfLabels:
+                        assignedTo += str(label[1]) + ","
+                    
+                    assignedTo = assignedTo[:-1]
+
+                elif test["agentSelectorConfig"]["agentSelectorType"] == "ANY_AGENT":
+                    assignedTo = "All Endpoint Agents"
+                elif test["agentSelectorConfig"]["agentSelectorType"] == "SPECIFIC_AGENTS":
+                    listOfAgents = GetAgentsFromIds(myToken, test["agentSelectorConfig"]["agentIds"], aid)
+                    #for agent in listOfAgents:
+                        #assignedTo += str(label[1]) + ","
+                    
+                    #assignedTo = assignedTo[:-1]
+                    assignedTo = "SPECIFIC_AGENTS" + " (Total: " + str(len(listOfAgents)) + ")"
+                
+                if test["enabled"] == 1:
+                    status = "Enabled"
+                if test["enabled"] == 0:
+                    status = "Disabled"
+
+                if "savedEvent" in test:
+                    if test["savedEvent"] == 0:
+                        results.append(["Scheduled - " + str(test["type"]), test["testName"], test["server"] , test["interval"], assignedTo, "", status])
+        elif(testType == TestType.automated_test):
+            assignedTo = ""
+            status = ""
+            for test in result.json()["automatedSessionTests"]:
+                if test["agentSelectorConfig"]["agentSelectorType"] == "LIST_OF_LABELS":
+                    listOfLabels = GetLabelsFromIds(myToken, test["agentSelectorConfig"]["labelIds"], aid)
+                    for label in listOfLabels:
+                        assignedTo += str(label[1]) + ","
+                    
+                    assignedTo = assignedTo[:-1]
+
+                elif test["agentSelectorConfig"]["agentSelectorType"] == "ANY_AGENT":
+                    assignedTo = "All Endpoint Agents"
+                elif test["agentSelectorConfig"]["agentSelectorType"] == "SPECIFIC_AGENTS":
+                    listOfAgents = GetAgentsFromIds(myToken, test["agentSelectorConfig"]["agentIds"], aid)
+                    #for agent in listOfAgents:
+                    #    assignedTo += str(label[1]) + ","
+                    
+                    #assignedTo = assignedTo[:-1]
+                    assignedTo = "SPECIFIC_AGENTS" + " (Total: " + str(len(listOfAgents)) + ")"
+                
+                if test["enabled"] == 1:
+                    status = "Enabled"
+                if test["enabled"] == 0:
+                    status = "Disabled"
+
+                if "savedEvent" in test:
+                    if test["savedEvent"] == 0:
+                        if "type" in test:
+                            results.append(["Dynamic - " + str(test["type"]), test["testName"], test["application"], test["interval"], assignedTo, "", status])
+                        else:
+                            results.append(["Dynamic - " + str(test["protocol"]), test["testName"], test["application"] , test["interval"], assignedTo, "", status])
+    
+    return results
+
+def GetEndpointLicensing(myToken:str, aid:str, endpointLicense:EndpointLicense):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/usage.json"
+
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        jsonResult = json.loads(result.text)["usage"]["quota"]
+        if endpointLicense==EndpointLicense.ADVANTAGE:
+            if "endpointAgentsIncluded" in jsonResult:
+                return jsonResult["endpointAgentsIncluded"]
+            else:
+                return "0"
+        elif endpointLicense == EndpointLicense.ESSENTIALS:
+            if "endpointAgentsEssentialsIncluded" in jsonResult:
+                return jsonResult["endpointAgentsEssentialsIncluded"]
+            else:
+                return "0"
+        elif endpointLicense == EndpointLicense.EMBEDDED:
+            if "endpointAgentsEmbeddedIncluded" in jsonResult:
+                return jsonResult["endpointAgentsEmbeddedIncluded"]
+            else:
+                return "0"
+
+def GetEndpointLicenseUsage(myToken:str, aid:str, endpointLicense:EndpointLicense):
+    global headers
+    global rate_limit
+    myTable = PrettyTable()
+    headers = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + myToken,
+    }
+    get_resource = "/usage.json"
+
+    result = session.get(url= BASE_URL + get_resource + "?aid=" + str(aid), headers = headers)
+    if(result.status_code == 429):
+        print(bcolors.WARNING + "Reached Rate limit: Time to refresh " + str((datetime.fromtimestamp(int(result.headers["x-organization-rate-limit-reset"])) - datetime.now()).seconds) + " seconds" + bcolors.ENDC)
+        while(result.status_code == 429):
+            result = session.get(url= BASE_URL + get_resource, headers = headers)
+    try:
+        rate_limit = int(result.headers["x-organization-rate-limit-remaining"])
+        print(bcolors.OKCYAN + "Performed Request, remaining: " + str(rate_limit)+ " requests" + bcolors.ENDC)
+    except Exception as ex:
+        print(ex)
+
+    if result.status_code > 199 and result.status_code < 400:
+        jsonResult = json.loads(result.text)['usage']
+        if endpointLicense==EndpointLicense.ADVANTAGE:
+            return jsonResult["endpointAgents"][0]["endpointAgentsUsed"]
+        elif endpointLicense == EndpointLicense.ESSENTIALS:
+            return jsonResult["endpointAgentsEssentials"][0]["endpointAgentsEssentialsUsed"]
+        elif endpointLicense == EndpointLicense.EMBEDDED:
+            return jsonResult["endpointAgentsEmbedded"][0]["endpointAgentsEmbeddedUsed"]
+
 def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     #Read implementation file
     shutil.copyfile(templatePath, "tempImplementationPlan.xlsx")
@@ -1111,8 +1574,11 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     summarySheet = workbook["Summary"]
     testsSheet = workbook["Tests Details"]
     agentSheet = workbook["Agent Site List"]
+    endpointSheet = workbook["Endpoint Details"]
+    alertsSheet = workbook["Alerts & Dashboards"]
 
     #region "Summary tab"
+    print(bcolors.OKGREEN + "Working on: Summary tab")
     orgName = GetOrganizationName(myToken, aid)
     i=0
     for r in range(1,summarySheet.max_row+1):
@@ -1131,6 +1597,7 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     #endregion
 
     #region "Agent List"
+    print(bcolors.OKGREEN + "Working on: Agents tab")
     clusterAgentRows = GetListOfAgents(myToken, AgentType.ENTERPRISE_CLUSTER, aid)
     enterpriseAgentRows = GetListOfAgents(myToken, AgentType.ENTERPRISE, aid)
     endpointAgentsRows = GetListOfAgents(myToken, AgentType.ENDPOINT, aid)
@@ -1174,6 +1641,7 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     
     #region "Tests and Unit Consumption"
 
+    print(bcolors.OKGREEN + "Working on: Tests tab")
     unitConsumption = GetQuotaUtilization(myToken, aid)
     testsSheet["C7"] = round(unitConsumption, 4)
 
@@ -1186,9 +1654,9 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
     listOfTests += (GetTests(myToken, TestType.sip_server, aid))
     listOfTests += (GetTests(myToken, TestType.http_server, aid))
     listOfTests += (GetTests(myToken, TestType.page_load, aid))
-    listOfTests += (GetTests(myToken, TestType.http_transaction, aid))
+    listOfTests += (GetTests(myToken, TestType.transaction_test, aid))
 
-    #DNS-Server
+    #Fill the table
     testRow = 0
     testCol = 0
     Rows_count = 0
@@ -1202,109 +1670,56 @@ def BuildImplementationPlan(templatePath:str, myToken:str, aid:str):
         testCol = 0
         testRow += 1
         
-    # Rows_count = len(dns_server_tests)-1
-    # for row in testsSheet.iter_rows(min_row=11, max_row=11+Rows_count, min_col=2, max_col=10):
-    #     for value in dns_server_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
+    #endregion
     
-    #DNS-Trace
-    # testRow=0
-    # testCol = 0
-    # min_row = 11+Rows_count
+    #region "EPA Licenses, Scheduled Tests and Dynamic Tests"
     
-    # for row in testsSheet.iter_rows(min_row=min_row+1, max_row=min_row+len(dns_trace_tests), min_col=2, max_col=10):
-    #     for value in dns_trace_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
+    print(bcolors.OKGREEN + "Working on: Endpoint data tab")
+    advantageConsumption = str(GetEndpointLicenseUsage(myToken, aid, EndpointLicense.ADVANTAGE)) + " out of " + str(GetEndpointLicensing(myToken, aid, EndpointLicense.ADVANTAGE))
+    essentialsConsumption = str(GetEndpointLicenseUsage(myToken, aid, EndpointLicense.ESSENTIALS)) + " out of " + str(GetEndpointLicensing(myToken, aid, EndpointLicense.ESSENTIALS))
+    endpointSheet["C9"] = advantageConsumption
+    endpointSheet["C10"] = essentialsConsumption
+    listOfTests = GetEndpointTests(myToken, TestType.scheduled_test, aid)
+    listOfTests += (GetEndpointTests(myToken, TestType.automated_test, aid))
 
-    # #DNS-SEC
-    # testRow=0
-    # testCol = 0
-    # min_row += len(dns_trace_tests)+1
-    
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(dns_sec_tests)-1, min_col=2, max_col=10):
-    #     for value in dns_sec_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
-    
-    # #Agent-Server
-    # testRow=0
-    # testCol = 0
-    # min_row += len(dns_sec_tests)+1
-    
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(agent_server_tests)-1, min_col=2, max_col=10):
-    #     for value in agent_server_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
+    #Fill the table
+    testRow = 0
+    testCol = 0
+    Rows_count = 0
 
-    # #Voice-SIP
-    # testRow=0
-    # testCol = 0
-    # min_row += len(agent_server_tests)+1
+    Rows_count = len(listOfTests)-1
+    for row in endpointSheet.iter_rows(min_row=24, max_row=24+Rows_count, min_col=2, max_col=8):
+        if(len(listOfTests[testRow])>0):
+            for value in listOfTests[testRow]:
+                row[testCol].value = value
+                testCol += 1
+        testCol = 0
+        testRow += 1
+
+    #endregion
+        
+    #region "Alerts"
     
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(voice_sip_tests)-1, min_col=2, max_col=10):
-    #     for value in voice_sip_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
-    
-    # #Voice-RTP
-    # testRow=0
-    # testCol = 0
-    # min_row += len(voice_sip_tests)+1
-    
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(voice_rtp_tests)-1, min_col=2, max_col=10):
-    #     for value in voice_rtp_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
-    
-    # #HTTP-Server
-    # testRow=0
-    # testCol = 0
-    # min_row += len(voice_rtp_tests)+1
-    
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(http_server_tests)-1, min_col=2, max_col=10):
-    #     for value in http_server_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
-    
-    # #Page-Load
-    # testRow=0
-    # testCol = 0
-    # min_row += len(http_server_tests)+1
-    
-    # for row in testsSheet.iter_rows(min_row=min_row, max_row=min_row+len(page_load_tests)-1, min_col=2, max_col=10):
-    #     for value in page_load_tests[testRow]:
-    #        row[testCol].value = value
-    #        testCol += 1
-           
-    #     testCol = 0
-    #     testRow+=1
+    print(bcolors.OKGREEN + "Working on: Alerts")
+    listOfAlerts = GetListOfAlerts(myToken, aid, DocumentType.ENTERPRISE_AGENTS)
+    listOfAlerts += (GetListOfAlerts(myToken, aid, DocumentType.ENDPOINT_AGENTS))
+
+    #Fill the table
+    testRow = 0
+    testCol = 0
+    Rows_count = 0
+
+    Rows_count = len(listOfAlerts)-1
+    for row in alertsSheet.iter_rows(min_row=11, max_row=11+Rows_count, min_col=2, max_col=8):
+        if(len(listOfAlerts[testRow])>0):
+            for value in listOfAlerts[testRow]:
+                row[testCol].value = value
+                testCol += 1
+        testCol = 0
+        testRow += 1
 
     #endregion
 
-    os.remove("tempImplementationPlan.xlsx")
     workbook.save(orgName + "_ImplementationPlan.xlsx")
 
 
@@ -1357,11 +1772,10 @@ def main():
     while(ValidateAccountName(token, "") == False):
         print()
 
-    BuildImplementationPlan("Python/Thousandeyes - Implementation Plan_2023.xlsx", token, aid)
-    
+    startTime = datetime.now()
+    BuildImplementationPlan("Thousandeyes - Implementation Plan_2023.xlsx", token, aid)
+    print(bcolors.BOLD + bcolors.OKGREEN, "Time elapsed: " + str((datetime.now() - startTime).seconds) + " seconds")
     watchdog.stop()
 
 if __name__ == "__main__":
     main()
-
-#=SI($S2=="Auto",1,SI(Y($S2>9,$S2<101),1,0))
